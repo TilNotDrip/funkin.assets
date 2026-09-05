@@ -1,0 +1,27 @@
+import funkin.graphics.FunkinSprite;
+
+class TankmanCutsceneSprite extends FunkinSprite
+{
+  public function new(x:Float, y:Float)
+  {
+    super(x, y);
+
+    loadTextureAtlas('gameplay/stages/tankmanBattlefield/cutscene/tankman');
+
+    // Ugh Animations
+    anim.addByFrameLabel("wellWellWell", "What do we got here", 24, false);
+    anim.addByFrameLabel("killYou", "We should just kill you", 24, false);
+
+    // Guns Animations
+    anim.addByFrameLabel("tightBars", "In Game Cutscene 2", 24, false);
+
+    // Stress Animations
+    anim.addByFrameLabel("godEffingDamnIt", "GOD EFFING DAMMIT", 24, false);
+    anim.addByFrameLabel("lookWhoItIs", "Sexually Ambiguous", 24, false);
+  }
+
+  public function playAnimation(animName:String, force:Bool = false, reversed:Bool = false, frame:Int = 0):Void
+  {
+    this.anim.play(animName, force, reversed, frame);
+  }
+}

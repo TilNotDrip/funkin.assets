@@ -1,0 +1,45 @@
+import funkin.graphics.FunkinSprite;
+import flixel.util.FlxSignal;
+
+class StressSpeakerCutsceneSprite extends FunkinSprite
+{
+  public var onGirlfriendFell:FlxSignal = new FlxSignal();
+  public var calledGirlfriendFell:Bool = false;
+
+  public function new(x:Float, y:Float)
+  {
+    super(x, y);
+
+    loadTextureAtlas('gameplay/stages/tankmanBattlefield/cutscene/pico', {
+      swfMode: true
+    });
+
+    // Stress Animations
+    anim.addByFrameLabel("gfTurn", "GF Turnin' Demon", 24, false);
+    anim.addByFrameLabel("picoSaves", "Pico Saves Them", 24, false);
+    anim.addByFrameLabel("idle", "Pico Idle", 24, false);
+
+    anim.onFrameChange.add(onAnimationFrame);
+  }
+
+  public function playAnimation(animName:String, force:Bool = false, reversed:Bool = false, frame:Int = 0):Void
+  {
+    if (animName == 'picoSaves')
+    {
+      calledGirlfriendFell = false;
+    }
+
+    this.anim.play(animName, force, reversed, frame);
+  }
+
+  public function onAnimationFrame(name:String, frame:Int, _:Int):Void
+  {
+    if (name == 'picoSaves' && frame > (2 - 1) && !calledGirlfriendFell)
+    {
+      onGirlfriendFell.dispatch();
+
+      // Makes sure this gets called, even if the game lags.
+      calledGirlfriendFell = true;
+    }
+  }
+}

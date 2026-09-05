@@ -1,19 +1,39 @@
-import funkin.play.song.Song;
-import funkin.save.Save;
-import funkin.play.PlayState;
-import funkin.play.cutscene.VideoCutscene;
-import funkin.play.PlayStatePlaylist;
 import funkin.assets.Paths as NewPaths;
+import funkin.audio.FunkinSound;
+import funkin.play.song.Song;
+import funkin.play.PlayState;
+import funkin.play.PlayStatePlaylist;
+import funkin.save.Save;
+import funkin.ui.FullScreenScaleMode;
+import funkin.util.Sequence;
+#if mobile
+import funkin.util.TouchUtil;
+#end
+import flixel.text.FlxText;
+import flixel.text.FlxTextBorderStyle;
+import flixel.tweens.FlxEase;
+import flixel.tweens.FlxTween;
+import flixel.util.FlxTimer;
 
 class GunsSong extends Song
 {
-  var hasPlayedCutscene:Bool;
+  var hasPlayedCutscene:Bool = false;
+
+  var cutsceneSeqManager:Sequence;
+
+  var canSkipCutscene:Bool = false;
+  var cutsceneSkipped:Bool = false;
+  var isCutsceneSkipPressed:Bool = false;
+  var skipText:FlxText;
+
+  var cutsceneMusic:FunkinSound;
+  var cutsceneSounds:Array<FunkinSound> = [];
+
+  var tankmanCutscene:TankmanCutsceneSprite;
 
   public function new()
   {
     super('guns');
-
-    hasPlayedCutscene = false;
   }
 
   public override function queryAssets(type:AssetType):Array<AssetPath>
@@ -22,8 +42,6 @@ class GunsSong extends Song
 
     switch (type)
     {
-      case "VIDEO":
-        results = results.concat([NewPaths.video('gameplay/songs/guns/cutscene', 'mkv')]);
       default:
         // nothing
     }
@@ -53,19 +71,187 @@ class GunsSong extends Song
 
     if (!hasPlayedCutscene)
     {
-      trace('Pausing countdown to play a video cutscene (`guns`)');
+      trace('Pausing countdown to play in-game cutscene (`guns`)');
 
       hasPlayedCutscene = true;
 
       event.cancel(); // CANCEL THE COUNTDOWN!
 
-      startVideo();
+      startCutscene();
     }
   }
 
-  function startVideo()
+  function startCutscene():Void
   {
-    VideoCutscene.play(NewPaths.video('gameplay/songs/guns/cutscene', 'mkv'));
+    PlayState.instance.isInCutscene = true;
+    PlayState.instance.mayPauseGame = false;
+    PlayState.instance.camHUD.visible = false;
+    PlayState.instance.camCutscene.visible = true;
+    PlayState.instance.currentCameraZoom = 1.08;
+
+    PlayState.instance.cameraFollowPoint.setPosition(316.0, 386.5);
+    FlxG.camera.snapToTarget();
+    PlayState.instance.resetCamera(false, false, false);
+
+    skipText = new FlxText(936 * FullScreenScaleMode.wideScale.x, 618 * FullScreenScaleMode.wideScale.y, 0, 'Skip [ ' + PlayState.instance.controls.getDialogueNameFromToken("CUTSCENE_ADVANCE", true) + ' ]', 20);
+    #if mobile
+    {
+      skipText.text = 'Skip [Pause Button]';
+      skipText.x -= 136;
+    }
+    #end
+    skipText.setFormat(Paths.font('vcr.ttf'), 40, 0xFFFFFFFF, "right", FlxTextBorderStyle.OUTLINE, 0xFF000000);
+    skipText.scrollFactor.set();
+    skipText.borderSize = 2;
+    skipText.alpha = 0;
+    PlayState.instance.add(skipText);
+
+    skipText.cameras = [PlayState.instance.camCutscene];
+
+    cutsceneMusic = FunkinSound.load(NewPaths.music('gameplay/stages/tankmanBattlefield/cutscene/distorto').audio().toFlxSoundAsset(), 1.0, true);
+    cutsceneSounds.push(cutsceneMusic);
+
+    var dadPosition:FlxPoint = PlayState.instance.currentStage.getDadPosition();
+    PlayState.instance.currentStage.getDad().visible = false;
+
+    tankmanCutscene = new TankmanCutsceneSprite(dadPosition.x - 316.0, dadPosition.y - 725.0);
+    tankmanCutscene.zIndex = PlayState.instance.currentStage.getDad().zIndex;
+    PlayState.instance.currentStage.add(tankmanCutscene);
+    PlayState.instance.currentStage.refresh();
+
+    var tankmanCutsceneEvents:Array<SequenceEvent> = [
+      {
+        time: 0.0,
+        callback: () -> {
+          cutsceneMusic.play();
+          cutsceneSounds.push(FunkinSound.playOnce(NewPaths.sound('gameplay/songs/guns/sounds/cutscene-dialog').toFlxSoundAsset(), 1.0));
+          tankmanCutscene.playAnimation("tightBars", true);
+
+          PlayState.instance.cameraFollowPoint.y = 486.5;
+          PlayState.instance.resetCamera(false, false, false);
+        }
+      },
+      {
+        time: 4.1,
+        callback: () -> {
+          PlayState.instance.tweenCameraZoom(1.26, 0.4, true, FlxEase.quadOut);
+          PlayState.instance.currentStage.getGirlfriend().playAnimation("sad", true);
+          PlayState.instance.currentStage.getGirlfriend().animation.curAnim.looped = true;
+        }
+      },
+      {
+        time: 4.55,
+        callback: () -> {
+          PlayState.instance.tweenCameraZoom(1.17, 0.4, true, FlxEase.quadInOut);
+        }
+      },
+      {
+        time: 10.5,
+        callback: () -> {
+          cutsceneSkipped = true;
+          canSkipCutscene = false;
+
+          FlxTween.tween(skipText, {alpha: 0}, 0.5, {ease: FlxEase.quadOut});
+
+          cutsceneMusic.fadeOut(0.5, 0, function(_) {
+            cutsceneMusic.stop();
+            cutsceneMusic.destroy();
+            cutsceneMusic = null;
+          });
+        }
+      },
+      {
+        time: 11.0,
+        callback: () -> {
+          var bfPoint:FlxPoint = PlayState.instance.currentStage.getBoyfriend().cameraFocusPoint;
+          PlayState.instance.cameraFollowPoint.setPosition(bfPoint.x, bfPoint.y);
+          PlayState.instance.resetCamera(false, false, false);
+          PlayState.instance.tweenCameraZoom(1, 0.5, false, FlxEase.quadInOut);
+
+          endCutscene();
+        }
+      }
+    ];
+
+    cutsceneSeqManager = new Sequence(tankmanCutsceneEvents);
+  }
+
+  function skipCutscene():Void
+  {
+    cutsceneSkipped = true;
+    canSkipCutscene = false;
+
+    PlayState.instance.camCutscene.fade(0xFF000000, 0.5, false, null, true);
+
+    while (cutsceneSounds.length > 0)
+    {
+      var sound:FunkinSound = cutsceneSounds.pop();
+      sound.fadeOut(0.5, 0, () -> {
+        sound.stop();
+        sound.destroy();
+        sound = null;
+      });
+    }
+
+    new FlxTimer().start(0.5, _ -> {
+      PlayState.instance.justUnpaused = true;
+      PlayState.instance.camCutscene.fade(0xFF000000, 0.5, true, null, true);
+
+      var bfPoint:FlxPoint = PlayState.instance.currentStage.getBoyfriend().cameraFocusPoint;
+      PlayState.instance.cameraFollowPoint.setPosition(bfPoint.x, bfPoint.y);
+      PlayState.instance.resetCamera(true, true, true);
+
+      skipText.visible = false;
+
+      endCutscene();
+    });
+  }
+
+  function endCutscene():Void
+  {
+    cutsceneSeqManager.destroy();
+    cutsceneSeqManager = null;
+
+    skipText.destroy();
+    skipText = null;
+
+    tankmanCutscene.destroy();
+    tankmanCutscene = null;
+
+    PlayState.instance.currentStage.getDad().visible = true;
+    PlayState.instance.currentStage.getGirlfriend().dance(true);
+
+    PlayState.instance.isInCutscene = false;
+    PlayState.instance.mayPauseGame = true;
+    PlayState.instance.startCountdown();
+  }
+
+  function onUpdate(event:UpdateScriptEvent):Void
+  {
+    super.onUpdate(event);
+
+    isCutsceneSkipPressed = PlayState.instance.controls.CUTSCENE_ADVANCE #if mobile || (TouchUtil.overlapsComplex(PlayState.instance.pauseButton) && TouchUtil.justPressed) #end;
+
+    if (isCutsceneSkipPressed && !cutsceneSkipped)
+    {
+      if (!canSkipCutscene)
+      {
+        trace('Can\'t skip cutscene yet!');
+        if (skipText != null)
+        {
+          FlxTween.tween(skipText, {alpha: 1}, 0.5, {ease: FlxEase.quadOut});
+          new FlxTimer().start(0.5, _ -> {
+            canSkipCutscene = true;
+            trace('Can skip cutscene!');
+          });
+        }
+      }
+    }
+    if (isCutsceneSkipPressed && !cutsceneSkipped && canSkipCutscene)
+    {
+      skipCutscene();
+      trace('Skipped cutscene!');
+    }
   }
 
   /**
@@ -86,5 +272,7 @@ class GunsSong extends Song
     super.onCreate(event);
 
     hasPlayedCutscene = false;
+    canSkipCutscene = false;
+    cutsceneSkipped = false;
   }
 }
